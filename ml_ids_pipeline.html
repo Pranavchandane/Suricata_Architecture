@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ML-IDS Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #050a0f;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,180,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,180,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 900px;
+    position: relative;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 13px;
+    letter-spacing: 6px;
+    color: #00ffb4;
+    text-transform: uppercase;
+    font-family: 'Share Tech Mono', monospace;
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+
+  h2 {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 2px;
+    margin-bottom: 50px;
+    text-transform: uppercase;
+  }
+
+  h2 span { color: #00ffb4; }
+
+  /* Pipeline */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Stage card */
+  .stage {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    gap: 20px;
+    opacity: 0;
+    transform: translateX(-30px);
+    animation: slideIn 0.5s ease forwards;
+  }
+
+  .stage:nth-child(odd) { transform: translateX(30px); }
+
+  @keyframes slideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .stage:nth-child(1) { animation-delay: 0.1s; }
+  .stage:nth-child(2) { animation-delay: 0.2s; }
+  .stage:nth-child(3) { animation-delay: 0.3s; }
+  .stage:nth-child(4) { animation-delay: 0.4s; }
+  .stage:nth-child(5) { animation-delay: 0.5s; }
+  .stage:nth-child(6) { animation-delay: 0.6s; }
+  .stage:nth-child(7) { animation-delay: 0.7s; }
+
+  /* Number */
+  .stage-num {
+    width: 48px;
+    min-width: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .num-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    color: var(--color);
+    background: rgba(0,0,0,0.5);
+    flex-shrink: 0;
+    box-shadow: 0 0 12px var(--color), inset 0 0 12px rgba(0,0,0,0.8);
+    position: relative;
+    z-index: 2;
+  }
+
+  .connector {
+    flex: 1;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--color), var(--next-color, #00ffb4));
+    margin: 0 auto;
+    opacity: 0.4;
+    min-height: 30px;
+  }
+
+  /* Card */
+  .card {
+    flex: 1;
+    border: 1px solid var(--color);
+    border-radius: 8px;
+    padding: 18px 22px;
+    background: rgba(0,0,0,0.6);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 30px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5), inset 0 0 30px rgba(0,0,0,0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .card:hover {
+    transform: translateX(4px);
+    box-shadow: -4px 0 0 var(--color), 0 0 30px rgba(0,0,0,0.5);
+  }
+
+  /* Glow bar on left */
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--color);
+    box-shadow: 0 0 10px var(--color);
+  }
+
+  /* Background watermark */
+  .card::after {
+    content: var(--icon);
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 48px;
+    opacity: 0.06;
+    pointer-events: none;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--color);
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--color);
+    padding: 2px 8px;
+    border-radius: 3px;
+    opacity: 0.7;
+  }
+
+  .card-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .card-desc {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+
+  /* Mini code snippets */
+  .detail-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .pill {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.05);
+    color: var(--color);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* Arrow between stages */
+  .arrow-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: -14px 0 -14px 68px;
+    z-index: 3;
+    position: relative;
+  }
+
+  .arrow {
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 14px solid var(--color, #00ffb4);
+    filter: drop-shadow(0 0 4px var(--color, #00ffb4));
+    opacity: 0.8;
+  }
+
+  /* Special ML stage */
+  .stage.highlight .card {
+    border-width: 2px;
+    background: rgba(0,20,10,0.8);
+  }
+
+  /* File source */
+  .file-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    margin-top: 6px;
+  }
+
+  /* Data flow line on right side */
+  .flow-line {
+    position: absolute;
+    right: -30px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, #00ffb4, transparent);
+    opacity: 0.15;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 40px;
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 2px;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color);
+    box-shadow: 0 0 6px var(--color);
+  }
+
+  /* Pulse animation on active dot */
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 6px var(--color); }
+    50% { box-shadow: 0 0 14px var(--color), 0 0 28px var(--color); }
+  }
+
+  .num-circle { animation: pulseGlow 3s ease-in-out infinite; }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 12px var(--color), inset 0 0 12px rgba(0,0,0,0.8); }
+    50% { box-shadow: 0 0 24px var(--color), 0 0 40px var(--color), inset 0 0 12px rgba(0,0,0,0.8); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>ML-IDS Architecture</h1>
+  <h2>Real-Time <span>Detection</span> Pipeline</h2>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="--color:#00ffb4"></div>Network Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="--color:#00c8ff"></div>Processing Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="--color:#ff9f00"></div>Intelligence Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="--color:#ff4f7b"></div>Output Layer</div>
+  </div>
+
+  <div class="pipeline">
+
+    <!-- Stage 1 -->
+    <div class="stage" style="--color:#00ffb4">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#00ffb4">01</div>
+        <div class="connector" style="--color:#00ffb4; --next-color:#00c8ff"></div>
+      </div>
+      <div class="card" style="--color:#00ffb4; --icon:'🌐'">
+        <div class="card-header">
+          <span class="tag">NETWORK</span>
+          <span class="card-title">Network Interface</span>
+        </div>
+        <div class="card-desc">Raw packets arrive at the network adapter. Npcap (Windows) intercepts all incoming and outgoing traffic on the wire before it reaches the OS networking stack.</div>
+        <div class="detail-list">
+          <span class="pill">Npcap (Windows)</span>
+          <span class="pill">libpcap (Linux)</span>
+          <span class="pill">AF_PACKET</span>
+          <span class="pill">promiscuous mode</span>
+        </div>
+        <div class="file-label">→ capture.py</div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap"><div class="arrow" style="--color:#00c8ff"></div></div>
+
+    <!-- Stage 2 -->
+    <div class="stage" style="--color:#00c8ff">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#00c8ff">02</div>
+        <div class="connector" style="--color:#00c8ff"></div>
+      </div>
+      <div class="card" style="--color:#00c8ff; --icon:'📦'">
+        <div class="card-header">
+          <span class="tag">CAPTURE</span>
+          <span class="card-title">Packet Capture</span>
+        </div>
+        <div class="card-desc">Scapy's <code style="color:#00c8ff">sniff()</code> reads raw packets from the interface in real-time. Each packet is passed to a callback function instantly — store=False keeps memory lean.</div>
+        <div class="detail-list">
+          <span class="pill">scapy sniff()</span>
+          <span class="pill">store=False</span>
+          <span class="pill">prn callback</span>
+          <span class="pill">non-blocking</span>
+        </div>
+        <div class="file-label">→ capture.py :: PacketCapture.start()</div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap"><div class="arrow" style="--color:#00c8ff"></div></div>
+
+    <!-- Stage 3 -->
+    <div class="stage" style="--color:#7b61ff">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#7b61ff">03</div>
+        <div class="connector" style="--color:#7b61ff"></div>
+      </div>
+      <div class="card" style="--color:#7b61ff; --icon:'🔍'">
+        <div class="card-header">
+          <span class="tag">DECODE</span>
+          <span class="card-title">Ethernet → IP → TCP/UDP</span>
+        </div>
+        <div class="card-desc">Each raw packet is dissected layer by layer. Headers are parsed and stored in a <strong style="color:#fff">DecodedPacket</strong> struct: source/destination IPs, ports, protocol type, TCP flags, and payload size.</div>
+        <div class="detail-list">
+          <span class="pill">Layer 2: Ethernet (MAC)</span>
+          <span class="pill">Layer 3: IPv4/IPv6</span>
+          <span class="pill">Layer 4: TCP / UDP / ICMP</span>
+          <span class="pill">TCP flags: SYN FIN RST ACK</span>
+        </div>
+        <div class="file-label">→ decode.py :: decode_packet()</div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap"><div class="arrow" style="--color:#7b61ff"></div></div>
+
+    <!-- Stage 4 -->
+    <div class="stage" style="--color:#00c8ff">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#00c8ff">04</div>
+        <div class="connector" style="--color:#00c8ff; --next-color:#ff9f00"></div>
+      </div>
+      <div class="card" style="--color:#00c8ff; --icon:'🔀'">
+        <div class="card-header">
+          <span class="tag">FLOW ENGINE</span>
+          <span class="card-title">Group Packets Into Flows</span>
+        </div>
+        <div class="card-desc">Packets are grouped into <strong style="color:#fff">bidirectional flows</strong> using a 5-tuple key. A background thread expires flows after timeout (60s) or on TCP FIN/RST. Expired flows are sent downstream for analysis.</div>
+        <div class="detail-list">
+          <span class="pill">5-tuple: src_ip, src_port, dst_ip, dst_port, proto</span>
+          <span class="pill">bidirectional hash key</span>
+          <span class="pill">FIN/RST = instant expire</span>
+          <span class="pill">timeout = 60s</span>
+          <span class="pill">background expiry thread</span>
+        </div>
+        <div class="file-label">→ flow_engine.py :: FlowEngine</div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap"><div class="arrow" style="--color:#ff9f00"></div></div>
+
+    <!-- Stage 5 -->
+    <div class="stage highlight" style="--color:#ff9f00">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#ff9f00">05</div>
+        <div class="connector" style="--color:#ff9f00"></div>
+      </div>
+      <div class="card" style="--color:#ff9f00; --icon:'⚡'">
+        <div class="card-header">
+          <span class="tag">KEY LAYER</span>
+          <span class="card-title">Feature Extraction</span>
+        </div>
+        <div class="card-desc">When a flow expires, 24 statistical features are computed from its packets. These numbers represent the <strong style="color:#fff">behavior signature</strong> of the flow — what the ML model actually sees.</div>
+        <div class="detail-list">
+          <span class="pill">flow duration</span>
+          <span class="pill">total packets & bytes</span>
+          <span class="pill">fwd/bwd packet counts</span>
+          <span class="pill">packet length mean/std/min/max</span>
+          <span class="pill">inter-arrival times (IAT)</span>
+          <span class="pill">bytes/sec & packets/sec</span>
+          <span class="pill">SYN / FIN / RST counts</span>
+          <span class="pill">src & dst port</span>
+        </div>
+        <div class="file-label">→ feature_extractor.py :: FeatureExtractor.extract()</div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap"><div class="arrow" style="--color:#ff9f00"></div></div>
+
+    <!-- Stage 6 -->
+    <div class="stage highlight" style="--color:#ff6b35">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#ff6b35">06</div>
+        <div class="connector" style="--color:#ff6b35; --next-color:#ff4f7b"></div>
+      </div>
+      <div class="card" style="--color:#ff6b35; --icon:'🤖'">
+        <div class="card-header">
+          <span class="tag">ML INFERENCE</span>
+          <span class="card-title">Model Prediction</span>
+        </div>
+        <div class="card-desc">The 24-feature vector is fed into a <strong style="color:#fff">Random Forest classifier</strong> trained on CIC-IDS2017. The model outputs a label and confidence score. This replaces Suricata's entire rule engine.</div>
+        <div class="detail-list">
+          <span class="pill">input: [24 features]</span>
+          <span class="pill">model: RandomForest (100 trees)</span>
+          <span class="pill">output: BENIGN / ATTACK</span>
+          <span class="pill">confidence: 0–100%</span>
+          <span class="pill">trained on CIC-IDS2017</span>
+        </div>
+        <div class="file-label">→ ml_model.py :: MLModel.predict()</div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap"><div class="arrow" style="--color:#ff4f7b"></div></div>
+
+    <!-- Stage 7 -->
+    <div class="stage" style="--color:#ff4f7b">
+      <div class="stage-num">
+        <div class="num-circle" style="--color:#ff4f7b">07</div>
+      </div>
+      <div class="card" style="--color:#ff4f7b; --icon:'🚨'">
+        <div class="card-header">
+          <span class="tag">OUTPUT</span>
+          <span class="card-title">Alert / JSON Log</span>
+        </div>
+        <div class="card-desc">If the model predicts ATTACK, a structured JSON alert is written to <code style="color:#ff4f7b">alerts.json</code> and printed to console. BENIGN flows are silently discarded.</div>
+        <div class="detail-list">
+          <span class="pill">timestamp</span>
+          <span class="pill">src_ip : src_port</span>
+          <span class="pill">dst_ip : dst_port</span>
+          <span class="pill">protocol</span>
+          <span class="pill">confidence %</span>
+          <span class="pill">alerts.json</span>
+        </div>
+        <div class="file-label">→ alert.py :: AlertEngine.generate()</div>
+      </div>
+    </div>
+
+  </div><!-- end pipeline -->
+
+  <div class="footer">ML-IDS PIPELINE · REAL-TIME NETWORK INTRUSION DETECTION · PYTHON + SCAPY + SKLEARN</div>
+
+</div>
+</body>
+</html>
