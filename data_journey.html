@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Journey - Packet to Model</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: #080c10;
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  padding: 40px 20px;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background: radial-gradient(ellipse at 20% 20%, rgba(0,200,255,0.04) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 80%, rgba(255,100,50,0.04) 0%, transparent 60%);
+  pointer-events:none;
+}
+
+.wrap { max-width: 960px; margin: 0 auto; }
+
+.title-block { text-align:center; margin-bottom: 50px; }
+.title-block .sub { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:5px; color:#00c8ff; opacity:0.6; margin-bottom:10px; }
+.title-block h1 { font-size:36px; font-weight:800; letter-spacing:1px; }
+.title-block h1 span { color:#00c8ff; }
+.title-block p { color:rgba(255,255,255,0.35); font-size:14px; margin-top:8px; font-family:'JetBrains Mono',monospace; }
+
+/* Each transform step */
+.step {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 0;
+  margin-bottom: 0;
+  opacity:0;
+  animation: fadeUp 0.5s ease forwards;
+}
+
+.step:nth-child(1){animation-delay:0.1s}
+.step:nth-child(2){animation-delay:0.2s}
+.step:nth-child(3){animation-delay:0.3s}
+.step:nth-child(4){animation-delay:0.4s}
+.step:nth-child(5){animation-delay:0.5s}
+.step:nth-child(6){animation-delay:0.6s}
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(20px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* Left: stage label */
+.stage-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-right: 24px;
+  padding-top: 20px;
+  position: relative;
+}
+
+.stage-label::after {
+  content:'';
+  position:absolute;
+  right: -1px;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, transparent, var(--c), transparent);
+  opacity: 0.4;
+}
+
+.stage-badge {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--c);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  color: var(--c);
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+
+.stage-file {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  color:rgba(255,255,255,0.25);
+  margin-top:6px;
+  text-align:right;
+}
+
+/* Right: data box */
+.data-box {
+  padding: 20px 24px 20px 32px;
+  position: relative;
+  margin-bottom: 0;
+}
+
+/* Horizontal connector dot */
+.data-box::before {
+  content:'';
+  position:absolute;
+  left: -6px;
+  top: 28px;
+  width: 12px;
+  height: 12px;
+  border-radius:50%;
+  background: var(--c);
+  box-shadow: 0 0 12px var(--c);
+}
+
+/* Title row */
+.data-title {
+  font-size: 18px;
+  font-weight: 700;
+  color:#fff;
+  margin-bottom: 10px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.data-title .arrow-badge {
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:rgba(255,255,255,0.3);
+  font-weight:400;
+}
+
+/* The actual data visualization */
+.data-view {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-left: 3px solid var(--c);
+  border-radius: 6px;
+  padding: 16px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  line-height:1.8;
+  position:relative;
+  overflow:hidden;
+}
+
+.data-view::after {
+  content: attr(data-label);
+  position:absolute;
+  top:8px; right:12px;
+  font-size:9px;
+  letter-spacing:2px;
+  color:rgba(255,255,255,0.15);
+  text-transform:uppercase;
+}
+
+/* Colors for different data types */
+.kw  { color: #ff79c6; }  /* keywords */
+.str { color: #f1fa8c; }  /* strings */
+.num { color: #bd93f9; }  /* numbers */
+.key { color: #8be9fd; }  /* keys */
+.val { color: #50fa7b; }  /* values */
+.cmt { color: rgba(255,255,255,0.25); font-style:italic; }
+.hl  { color: #ff9f00; font-weight:600; } /* highlight */
+.dim { color:rgba(255,255,255,0.3); }
+
+/* Transform arrow between steps */
+.transform-arrow {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding: 8px 24px 8px calc(200px + 32px);
+  opacity:0.6;
+}
+
+.t-line { flex:0 0 2px; height:30px; background: linear-gradient(to bottom, var(--from), var(--to)); margin-left:calc(200px + 32px - 236px); }
+
+.transform-label {
+  display:flex;
+  align-items:center;
+  gap: 14px;
+  padding-left: calc(200px + 32px);
+}
+
+.t-dot-line {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding-left: calc(200px);
+  padding-right: 32px;
+  gap:0;
+}
+
+/* Vertical connecting line between boxes */
+.vconnect {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  height: 40px;
+}
+
+.vconnect-left {
+  border-right: 2px solid rgba(255,255,255,0.06);
+}
+
+.vconnect-right {
+  display:flex;
+  align-items:center;
+  padding-left: 32px;
+  gap: 12px;
+}
+
+.transform-pill {
+  display:inline-flex;
+  align-items:center;
+  gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color: rgba(255,255,255,0.4);
+}
+
+.transform-pill .dot {
+  width:6px; height:6px; border-radius:50%;
+  background: var(--c);
+  box-shadow: 0 0 6px var(--c);
+  flex-shrink:0;
+}
+
+.chevron {
+  color: rgba(255,255,255,0.2);
+  font-size:18px;
+  padding-left: calc(200px + 26px);
+  padding-bottom:4px;
+  display:block;
+}
+
+/* Final output box */
+.final-box {
+  background: linear-gradient(135deg, rgba(255,79,123,0.1), rgba(255,100,50,0.05));
+  border: 2px solid #ff4f7b;
+  border-radius:10px;
+  padding:24px;
+  margin-top:10px;
+  position:relative;
+  overflow:hidden;
+}
+
+.final-box::before {
+  content:'OUTPUT';
+  position:absolute;
+  top:10px; right:14px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;
+  letter-spacing:3px;
+  color:rgba(255,79,123,0.4);
+}
+
+.result-row {
+  display:flex;
+  gap:16px;
+  margin-top:12px;
+  flex-wrap:wrap;
+}
+
+.result-card {
+  flex:1;
+  min-width:140px;
+  background:rgba(0,0,0,0.4);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:6px;
+  padding:12px 16px;
+  text-align:center;
+}
+
+.result-card .rc-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;
+  letter-spacing:2px;
+  color:rgba(255,255,255,0.3);
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+
+.result-card .rc-val {
+  font-size:22px;
+  font-weight:800;
+  color: var(--c);
+  text-shadow: 0 0 20px var(--c);
+}
+
+.result-card .rc-sub {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  color:rgba(255,255,255,0.25);
+  margin-top:4px;
+}
+
+/* Bytes visual */
+.bytes-row {
+  display:flex;
+  gap:3px;
+  flex-wrap:wrap;
+  margin-bottom:6px;
+}
+
+.byte {
+  width:28px; height:22px;
+  background: rgba(0,200,255,0.1);
+  border: 1px solid rgba(0,200,255,0.2);
+  border-radius:3px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:rgba(0,200,255,0.7);
+  transition: all 0.3s;
+}
+
+.byte.eth { background:rgba(0,200,100,0.1); border-color:rgba(0,200,100,0.3); color:rgba(0,200,100,0.8); }
+.byte.ip  { background:rgba(100,100,255,0.1); border-color:rgba(100,100,255,0.3); color:rgba(150,150,255,0.8); }
+.byte.tcp { background:rgba(255,160,0,0.1); border-color:rgba(255,160,0,0.3); color:rgba(255,160,0,0.8); }
+.byte.pay { background:rgba(255,80,120,0.1); border-color:rgba(255,80,120,0.2); color:rgba(255,80,120,0.7); }
+.byte.dim { background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.05); color:rgba(255,255,255,0.2); }
+
+.byte-legend {
+  display:flex; gap:16px; margin-top:8px; flex-wrap:wrap;
+}
+.bl-item {
+  display:flex; align-items:center; gap:6px;
+  font-family:'JetBrains Mono',monospace; font-size:10px; color:rgba(255,255,255,0.35);
+}
+.bl-dot { width:8px; height:8px; border-radius:2px; }
+
+/* Feature bar chart */
+.feat-bars { display:flex; flex-direction:column; gap:5px; }
+.feat-row { display:flex; align-items:center; gap:10px; }
+.feat-name { font-size:10px; color:rgba(255,255,255,0.4); width:160px; flex-shrink:0; text-align:right; }
+.feat-bar-wrap { flex:1; height:14px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden; }
+.feat-bar { height:100%; border-radius:3px; background: var(--c); opacity:0.7; transition: width 1s ease; }
+.feat-val { font-size:10px; color:var(--c); width:70px; flex-shrink:0; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:#0d1117; }
+::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="title-block">
+    <div class="sub">data transformation journey</div>
+    <h1>Packet <span>→</span> ML Model</h1>
+    <p>// what the data looks like at each stage of the pipeline</p>
+  </div>
+
+  <!-- STEP 1: Raw bytes off the wire -->
+  <div class="step" style="--c:#00c8ff">
+    <div class="stage-label">
+      <div class="stage-badge">Stage 1</div>
+      <div class="stage-file">capture.py</div>
+    </div>
+    <div class="data-box">
+      <div class="data-title">
+        Raw Bytes Off The Wire
+        <span class="arrow-badge">// what scapy sniff() receives</span>
+      </div>
+      <div class="data-view" data-label="raw bytes">
+        <div class="bytes-row">
+          <!-- Ethernet header: 14 bytes -->
+          <div class="byte eth">ff</div><div class="byte eth">ff</div><div class="byte eth">ff</div>
+          <div class="byte eth">a4</div><div class="byte eth">c3</div><div class="byte eth">f0</div>
+          <div class="byte eth">08</div><div class="byte eth">00</div><div class="byte eth">c4</div>
+          <div class="byte eth">11</div><div class="byte eth">22</div><div class="byte eth">33</div>
+          <div class="byte eth">08</div><div class="byte eth">00</div>
+          <!-- IP header: 20 bytes -->
+          <div class="byte ip">45</div><div class="byte ip">00</div><div class="byte ip">00</div>
+          <div class="byte ip">3c</div><div class="byte ip">1c</div><div class="byte ip">46</div>
+          <div class="byte ip">40</div><div class="byte ip">00</div><div class="byte ip">40</div>
+          <div class="byte ip">06</div><div class="byte ip">ae</div><div class="byte ip">17</div>
+          <div class="byte ip">c0</div><div class="byte ip">a8</div><div class="byte ip">01</div>
+          <div class="byte ip">64</div><div class="byte ip">c0</div><div class="byte ip">a8</div>
+          <div class="byte ip">01</div><div class="byte ip">01</div>
+          <!-- TCP header: 20 bytes -->
+          <div class="byte tcp">1f</div><div class="byte tcp">90</div><div class="byte tcp">00</div>
+          <div class="byte tcp">50</div><div class="byte tcp">00</div><div class="byte tcp">01</div>
+          <div class="byte tcp">a3</div><div class="byte tcp">f2</div><div class="byte tcp">00</div>
+          <div class="byte tcp">00</div><div class="byte tcp">00</div><div class="byte tcp">00</div>
+          <div class="byte tcp">50</div><div class="byte tcp">02</div><div class="byte tcp">20</div>
+          <div class="byte tcp">00</div><div class="byte tcp">91</div><div class="byte tcp">7c</div>
+          <div class="byte tcp">00</div><div class="byte tcp">00</div>
+          <!-- Payload -->
+          <div class="byte pay">47</div><div class="byte pay">45</div><div class="byte pay">54</div>
+          <div class="byte pay">20</div><div class="byte pay">2f</div>
+          <div class="byte dim">...</div>
+        </div>
+        <div class="byte-legend">
+          <div class="bl-item"><div class="bl-dot" style="background:rgba(0,200,100,0.6)"></div>Ethernet (14 bytes)</div>
+          <div class="bl-item"><div class="bl-dot" style="background:rgba(100,100,255,0.6)"></div>IP Header (20 bytes)</div>
+          <div class="bl-item"><div class="bl-dot" style="background:rgba(255,160,0,0.6)"></div>TCP Header (20 bytes)</div>
+          <div class="bl-item"><div class="bl-dot" style="background:rgba(255,80,120,0.6)"></div>Payload (data)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="vconnect">
+    <div class="vconnect-left"></div>
+    <div class="vconnect-right">
+      <span style="color:rgba(255,255,255,0.15); font-size:20px">↓</span>
+      <div class="transform-pill" style="--c:#7b61ff"><div class="dot" style="background:#7b61ff;box-shadow:0 0 6px #7b61ff"></div>decode_packet(raw_pkt) called</div>
+    </div>
+  </div>
+
+  <!-- STEP 2: DecodedPacket struct -->
+  <div class="step" style="--c:#7b61ff">
+    <div class="stage-label">
+      <div class="stage-badge">Stage 2</div>
+      <div class="stage-file">decode.py</div>
+    </div>
+    <div class="data-box">
+      <div class="data-title">
+        DecodedPacket Object
+        <span class="arrow-badge">// headers parsed into Python fields</span>
+      </div>
+      <div class="data-view" data-label="DecodedPacket">
+<span class="kw">pkt</span> = DecodedPacket {
+  <span class="key">timestamp</span>  : <span class="num">1709385600.432</span>     <span class="cmt"># unix time</span>
+  <span class="key">src_ip</span>     : <span class="str">"192.168.1.100"</span>
+  <span class="key">dst_ip</span>     : <span class="str">"192.168.1.1"</span>
+  <span class="key">protocol</span>   : <span class="str">"TCP"</span>
+  <span class="key">src_port</span>   : <span class="num">8080</span>
+  <span class="key">dst_port</span>   : <span class="num">443</span>
+  <span class="key">tcp_flags</span>  : <span class="hl">S</span>              <span class="cmt"># SYN flag = new connection</span>
+  <span class="key">payload_len</span>: <span class="num">0</span>              <span class="cmt"># SYN has no payload</span>
+}
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="vconnect">
+    <div class="vconnect-left"></div>
+    <div class="vconnect-right">
+      <span style="color:rgba(255,255,255,0.15); font-size:20px">↓</span>
+      <div class="transform-pill" style="--c:#00c8ff"><div class="dot" style="background:#00c8ff;box-shadow:0 0 6px #00c8ff"></div>flow_engine.process_packet(pkt) called</div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Flow accumulation -->
+  <div class="step" style="--c:#00c8ff">
+    <div class="stage-label">
+      <div class="stage-badge">Stage 3</div>
+      <div class="stage-file">flow_engine.py</div>
+    </div>
+    <div class="data-box">
+      <div class="data-title">
+        Flow Object (accumulates packets)
+        <span class="arrow-badge">// many packets → one flow</span>
+      </div>
+      <div class="data-view" data-label="Flow (growing)">
+<span class="cmt"># Flow key derived from 5-tuple (bidirectional)</span>
+<span class="key">flow_key</span> = <span class="str">("192.168.1.1", 443, "192.168.1.100", 8080, "TCP")</span>
+
+<span class="kw">flow</span> = Flow {
+  <span class="key">start_time</span>   : <span class="num">1709385600.432</span>
+  <span class="key">last_seen</span>    : <span class="num">1709385601.891</span>
+  <span class="key">fwd_packets</span>  : <span class="dim">[pkt1, pkt2, pkt3, pkt4]</span>   <span class="cmt"># client → server</span>
+  <span class="key">bwd_packets</span>  : <span class="dim">[pkt5, pkt6, pkt7]</span>         <span class="cmt"># server → client</span>
+  <span class="key">packets</span>      : <span class="dim">[pkt1, pkt2, ... pkt7]</span>      <span class="cmt"># all packets</span>
+}
+
+<span class="cmt"># Packets keep arriving... flow keeps growing...</span>
+<span class="cmt"># Until TCP FIN/RST OR 60 second timeout → flow expires</span>
+<span class="hl">→ on_flow_complete(flow) triggered</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="vconnect">
+    <div class="vconnect-left"></div>
+    <div class="vconnect-right">
+      <span style="color:rgba(255,255,255,0.15); font-size:20px">↓</span>
+      <div class="transform-pill" style="--c:#ff9f00"><div class="dot" style="background:#ff9f00;box-shadow:0 0 6px #ff9f00"></div>feature_extractor.extract(flow) called</div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Feature vector -->
+  <div class="step" style="--c:#ff9f00">
+    <div class="stage-label">
+      <div class="stage-badge">Stage 4</div>
+      <div class="stage-file">feature_extractor.py</div>
+    </div>
+    <div class="data-box">
+      <div class="data-title">
+        Feature Vector [24 numbers]
+        <span class="arrow-badge">// flow behavior compressed to numbers</span>
+      </div>
+      <div class="data-view" data-label="feature vector">
+        <div class="feat-bars">
+          <div class="feat-row">
+            <div class="feat-name">duration</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff9f00; width:30%"></div></div>
+            <div class="feat-val" style="--c:#ff9f00">1.459s</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">total_packets</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff9f00; width:14%"></div></div>
+            <div class="feat-val" style="--c:#ff9f00">7</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">total_bytes</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff9f00; width:40%"></div></div>
+            <div class="feat-val" style="--c:#ff9f00">2048</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">fwd_packet_count</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#00c8ff; width:20%"></div></div>
+            <div class="feat-val" style="--c:#00c8ff">4</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">fwd_pkt_len_mean</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#00c8ff; width:55%"></div></div>
+            <div class="feat-val" style="--c:#00c8ff">312.5</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">bwd_packet_count</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#7b61ff; width:15%"></div></div>
+            <div class="feat-val" style="--c:#7b61ff">3</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">iat_mean</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff9f00; width:25%"></div></div>
+            <div class="feat-val" style="--c:#ff9f00">0.243s</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">bytes_per_sec</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff9f00; width:70%"></div></div>
+            <div class="feat-val" style="--c:#ff9f00">1403.0</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">tcp_syn_count</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff4f7b; width:5%"></div></div>
+            <div class="feat-val" style="--c:#ff4f7b">1</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name">dst_port</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#ff9f00; width:88%"></div></div>
+            <div class="feat-val" style="--c:#ff9f00">443</div>
+          </div>
+          <div class="feat-row">
+            <div class="feat-name" style="color:rgba(255,255,255,0.2)">... 14 more features</div>
+            <div class="feat-bar-wrap"><div class="feat-bar" style="--c:#333; width:100%"></div></div>
+            <div class="feat-val" style="--c:#555">...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="vconnect">
+    <div class="vconnect-left"></div>
+    <div class="vconnect-right">
+      <span style="color:rgba(255,255,255,0.15); font-size:20px">↓</span>
+      <div class="transform-pill" style="--c:#ff6b35"><div class="dot" style="background:#ff6b35;box-shadow:0 0 6px #ff6b35"></div>feature_extractor.to_vector() → numpy array</div>
+    </div>
+  </div>
+
+  <!-- STEP 5: Numpy array into model -->
+  <div class="step" style="--c:#ff6b35">
+    <div class="stage-label">
+      <div class="stage-badge">Stage 5</div>
+      <div class="stage-file">ml_model.py</div>
+    </div>
+    <div class="data-box">
+      <div class="data-title">
+        NumPy Array → Model.predict()
+        <span class="arrow-badge">// what the model actually receives</span>
+      </div>
+      <div class="data-view" data-label="model input">
+<span class="cmt"># Reshaped to (1, 24) — one sample, 24 features</span>
+<span class="key">X</span> = np.array([[
+  <span class="num">1.459</span>,   <span class="cmt"># duration</span>
+  <span class="num">7</span>,       <span class="cmt"># total_packets</span>
+  <span class="num">2048</span>,    <span class="cmt"># total_bytes</span>
+  <span class="num">4</span>,       <span class="cmt"># fwd_packet_count</span>
+  <span class="num">1250</span>,    <span class="cmt"># fwd_byte_count</span>
+  <span class="num">312.5</span>,   <span class="cmt"># fwd_pkt_len_mean</span>
+  <span class="num">45.2</span>,    <span class="cmt"># fwd_pkt_len_std</span>
+  <span class="num">512</span>,     <span class="cmt"># fwd_pkt_len_max</span>
+  <span class="num">0</span>,       <span class="cmt"># fwd_pkt_len_min</span>
+  <span class="num">3</span>,       <span class="cmt"># bwd_packet_count</span>
+  <span class="num">798</span>,     <span class="cmt"># bwd_byte_count</span>
+  <span class="num">266.0</span>,   <span class="cmt"># bwd_pkt_len_mean</span>
+  <span class="num">33.1</span>,    <span class="cmt"># bwd_pkt_len_std</span>
+  <span class="num">0.243</span>,   <span class="cmt"># iat_mean</span>
+  <span class="num">0.091</span>,   <span class="cmt"># iat_std</span>
+  <span class="num">0.412</span>,   <span class="cmt"># iat_max</span>
+  <span class="num">0.101</span>,   <span class="cmt"># iat_min</span>
+  <span class="num">1403.0</span>,  <span class="cmt"># bytes_per_sec</span>
+  <span class="num">4.79</span>,    <span class="cmt"># packets_per_sec</span>
+  <span class="num">1</span>,       <span class="cmt"># tcp_syn_count</span>
+  <span class="num">1</span>,       <span class="cmt"># tcp_fin_count</span>
+  <span class="num">0</span>,       <span class="cmt"># tcp_rst_count</span>
+  <span class="num">8080</span>,    <span class="cmt"># src_port</span>
+  <span class="num">443</span>      <span class="cmt"># dst_port</span>
+]]).reshape(<span class="hl">1, 24</span>)
+
+<span class="kw">prediction</span>  = model.predict(X)          <span class="cmt"># → [0] or [1]</span>
+<span class="kw">confidence</span>  = model.predict_proba(X)    <span class="cmt"># → [[0.92, 0.08]]</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="vconnect">
+    <div class="vconnect-left"></div>
+    <div class="vconnect-right">
+      <span style="color:rgba(255,255,255,0.15); font-size:20px">↓</span>
+      <div class="transform-pill" style="--c:#ff4f7b"><div class="dot" style="background:#ff4f7b;box-shadow:0 0 6px #ff4f7b"></div>alerter.generate(flow, label, confidence)</div>
+    </div>
+  </div>
+
+  <!-- STEP 6: Final output -->
+  <div class="step" style="--c:#ff4f7b">
+    <div class="stage-label">
+      <div class="stage-badge">Stage 6</div>
+      <div class="stage-file">alert.py</div>
+    </div>
+    <div class="data-box">
+      <div class="data-title">
+        JSON Alert Output
+        <span class="arrow-badge">// written to alerts.json</span>
+      </div>
+      <div class="final-box">
+        <div class="data-view" style="background:transparent; border:none; padding:0" data-label="">
+{
+  <span class="key">"timestamp"</span>  : <span class="str">"2024-03-02T14:32:11Z"</span>,
+  <span class="key">"alert"</span>      : <span class="hl">"ATTACK"</span>,
+  <span class="key">"confidence"</span> : <span class="num">94.7</span>,
+  <span class="key">"src_ip"</span>     : <span class="str">"192.168.1.100"</span>,
+  <span class="key">"src_port"</span>   : <span class="num">8080</span>,
+  <span class="key">"dst_ip"</span>     : <span class="str">"192.168.1.1"</span>,
+  <span class="key">"dst_port"</span>   : <span class="num">443</span>,
+  <span class="key">"protocol"</span>   : <span class="str">"TCP"</span>,
+  <span class="key">"duration"</span>   : <span class="num">1.459</span>,
+  <span class="key">"packets"</span>    : <span class="num">7</span>
+}
+        </div>
+        <div class="result-row">
+          <div class="result-card">
+            <div class="rc-label">prediction</div>
+            <div class="rc-val" style="--c:#ff4f7b">ATTACK</div>
+            <div class="rc-sub">label = 1</div>
+          </div>
+          <div class="result-card">
+            <div class="rc-label">confidence</div>
+            <div class="rc-val" style="--c:#ff9f00">94.7%</div>
+            <div class="rc-sub">predict_proba</div>
+          </div>
+          <div class="result-card">
+            <div class="rc-label">written to</div>
+            <div class="rc-val" style="--c:#00c8ff; font-size:14px; margin-top:6px">alerts.json</div>
+            <div class="rc-sub">appended</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end wrap -->
+</body>
+</html>
